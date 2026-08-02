@@ -256,3 +256,193 @@ print("="*50)
 
 
 
+
+
+# ========================================================================
+# Phase 5: Scaled Benchmark & Visualization
+# ========================================================================
+
+import time
+import matplotlib.pyplot as plt
+
+print("\n" + "=" * 60)
+print("PHASE 5: Scaled Benchmark & Visualization")
+print("=" * 60)
+
+# -----------------
+# Configuration
+# -----------------
+
+base_prompt = (
+    'Summarize this file: '
+    '/*$(sleep 5)`sleep 5``*/-sleep(5)-"||sleep(5)||"/etc/passwd'
+)
+
+# Different input sizes
+multipliers = [1, 5, 10, 25, 50, 100, 250, 500]
+
+# Number of benchmark repetitions
+RUNS = 5
+
+text_lengths = []
+aho_times = []
+naive_times = []
+
+print("[*] Running scaled benchmark...")
+
+# ----------------
+# Benchmark Loop
+# ----------------
+
+for mult in multipliers:
+
+    test_text = base_prompt * mult
+
+    text_lengths.append(len(test_text))
+
+    # ======================
+    # Aho-Corasick Benchmark
+    # ======================
+
+    aho_total = 0.0
+
+    for _ in range(RUNS):
+
+        start = time.perf_counter()
+
+        waf_engine.search(test_text)
+
+        end = time.perf_counter()
+
+        aho_total += (end - start)
+
+    aho_average = aho_total / RUNS
+
+    aho_times.append(aho_average)
+
+    # =====================================
+    # TRUE Naive String Matching Benchmark
+    # =====================================
+
+    naive_total = 0.0
+
+    for _ in range(RUNS):
+
+        start = time.perf_counter()
+
+        for pattern in cmdi_signatures:
+
+            pattern_length = len(pattern)
+            text_length = len(test_text)
+
+            if pattern_length == 0:
+                continue
+
+            # Slide pattern across text
+            for i in range(text_length - pattern_length + 1):
+
+                matched = True
+
+                # Compare character-by-character
+                for j in range(pattern_length):
+
+                    if test_text[i + j] != pattern[j]:
+                        matched = False
+                        break
+
+                if matched:
+                    pass
+
+        end = time.perf_counter()
+
+        naive_total += (end - start)
+
+    naive_average = naive_total / RUNS
+
+    naive_times.append(naive_average)
+
+# ---------------
+# Print Results
+# ---------------
+
+print("\nBenchmark Results")
+print("-" * 85)
+
+print(
+    f"{'Input Size':<15}"
+    f"{'Naive (s)':<18}"
+    f"{'Aho (s)':<18}"
+    f"{'Speedup':<15}"
+)
+
+print("-" * 85)
+
+for length, naive, aho in zip(text_lengths, naive_times, aho_times):
+
+    speedup = naive / aho if aho > 0 else float("inf")
+
+    print(
+        f"{length:<15}"
+        f"{naive:<18.6f}"
+        f"{aho:<18.6f}"
+        f"{speedup:<15.2f}x"
+    )
+
+
+
+
+# ---------------------------------
+# Export Benchmark Results to CSV
+# ---------------------------------
+benchmark_results_df = pd.DataFrame({
+    "input_size_chars": text_lengths,
+    "naive_time_seconds": naive_times,
+    "aho_corasick_time_seconds": aho_times,
+    "speedup_factor": [n/a if a > 0 else float("inf") for n, a in zip(naive_times, aho_times)]
+})
+
+benchmark_results_df.to_csv("throughput_benchmark_results.csv", index=False)
+print(f"\n[SUCCESS] Benchmark results exported to 'throughput_benchmark_results.csv'")
+print(benchmark_results_df.to_string(index=False))
+
+# ------------------
+# Plot Graph
+# ------------------
+
+plt.figure(figsize=(10,6))
+
+plt.plot(
+    text_lengths,
+    naive_times,
+    marker="o",
+    linestyle="--",
+    linewidth=2,
+    label="Naive String Matching (O(N × M))"
+)
+
+plt.plot(
+    text_lengths,
+    aho_times,
+    marker="s",
+    linewidth=2,
+    label="Aho-Corasick (O(N + M + Z))"
+)
+
+plt.title("Performance Comparison: Aho-Corasick vs Naive String Matching")
+
+plt.xlabel("Input Text Length (Characters)")
+
+plt.ylabel("Average Execution Time (Seconds)")
+
+plt.grid(True)
+
+plt.legend()
+
+plt.tight_layout()
+
+plt.savefig("benchmark_results.png", dpi=300, bbox_inches="tight")
+
+plt.show()
+
+print("\n[SUCCESS] Benchmark graph exported as 'benchmark_results.png'")
+
