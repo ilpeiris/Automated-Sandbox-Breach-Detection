@@ -124,3 +124,57 @@ class AhoCorasick:
                     results.append((start_index, pattern))
                     
         return results
+
+
+
+
+# =============================================================================
+# Phase 2: Data Ingestion (Local Priority with GitHub Fallback)
+# ===========================================================================
+import pandas as pd
+import urllib.request
+import urllib.error
+import os
+
+print("[*] Initiating Data Ingestion...")
+
+# Source 1: Kaggle Dataset (Local CSV)
+try:
+    df = pd.read_csv("command-injection.csv")
+    kaggle_payloads = df[df['Label'] == 1]['sentence'].dropna().astype(str).tolist()
+    print(f"[+] Loaded {len(kaggle_payloads)} signatures from local Kaggle CSV.")
+except FileNotFoundError:
+    print("[!] ERROR: 'command-injection.csv' not found. Please ensure it is in the same directory.")
+    kaggle_payloads = []
+
+# Source 2: PayloadsAllTheThings (Local TXT with Dynamic GitHub Fallback)
+github_payloads = []
+try:
+    # 1st Priority: Try reading the local downloaded file
+    with open("command-execution-unix.txt", "r", encoding="utf-8") as f:
+        github_payloads = [line.strip() for line in f.readlines() if line.strip()]
+    print(f"[+] Loaded {len(github_payloads)} signatures from local TXT file.")
+    
+except FileNotFoundError:
+    # 2nd Priority: Fallback to GitHub if local file is corrupted or blocked by security
+    github_url = "https://raw.githubusercontent.com/swisskyrepo/PayloadsAllTheThings/master/Command%20Injection/Intruder/command-execution-unix.txt"
+    try:
+        print("[*] Local TXT not found. Fetching from GitHub as fallback...")
+        response = urllib.request.urlopen(github_url)
+        raw_text = response.read().decode('utf-8')
+        github_payloads = [line.strip() for line in raw_text.split('\n') if line.strip()]
+        print(f"[+] Loaded {len(github_payloads)} signatures from GitHub.")
+    except urllib.error.URLError as e:
+        print(f"[-] Could not reach GitHub ({e.reason}). Falling back to Kaggle data only.")
+
+# Merge and Deduplicate
+cmdi_signatures = list(set(kaggle_payloads + github_payloads))
+
+print("="*50)
+print(f"[SUCCESS] Total unique malicious signatures compiled: {len(cmdi_signatures)}")
+print("="*50)
+
+
+
+
+
