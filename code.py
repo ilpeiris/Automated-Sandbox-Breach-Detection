@@ -584,3 +584,171 @@ if false_positive_lines:
 
 
 
+
+# ======================================================================
+# Phase 7: Signature Refinement Experiment (Before/After Comparison)
+# ======================================================================
+
+# -------------------------------------------------
+# Save Baseline (Unfiltered) Results for Comparison
+# -------------------------------------------------
+baseline_results = {
+    "condition": "Unfiltered (Baseline)",
+    "total_signatures": len(cmdi_signatures),
+    "recall": recall,
+    "false_negative_rate": false_negative_rate,
+    "specificity": specificity,
+    "false_positive_rate": false_positive_rate
+}
+print("[SAVED] Baseline results captured for comparison.")
+print(baseline_results)
+
+
+
+
+# ------------------------------------------------------------------
+# Signature Quality Filter: Remove overly short/generic patterns
+# ------------------------------------------------------------------
+# Signatures shorter than MIN_PATTERN_LENGTH are too generic and
+# trigger excessive false positives on benign text (e.g. "; ", "-", "||").
+# This directly addresses the "Semantic Stripping" limitation identified
+# in Part I Section 3.6.
+
+MIN_PATTERN_LENGTH = 4
+
+original_count = len(cmdi_signatures)
+filtered_signatures = [sig for sig in cmdi_signatures if len(sig.strip()) >= MIN_PATTERN_LENGTH]
+filtered_count = len(filtered_signatures)
+
+print(f"[*] Signature filtering: {original_count} -> {filtered_count} "
+      f"(removed {original_count - filtered_count} patterns shorter than {MIN_PATTERN_LENGTH} chars)")
+
+# 
+removed_signatures = [sig for sig in cmdi_signatures if len(sig.strip()) < MIN_PATTERN_LENGTH]
+print(f"[*] Removed signatures ({len(removed_signatures)}): {removed_signatures}")
+
+# -------------------------------------------------------=
+# Rebuild a FRESH engine using only the filtered signatures
+# --------------------------------------------------------
+filtered_engine = AhoCorasick()
+
+for signature in filtered_signatures:
+    filtered_engine.add_pattern(str(signature))
+
+filtered_engine.build_failure_links()
+
+print(f"[+] Filtered engine rebuilt with {filtered_count} signatures.")
+
+
+
+
+# ------------------------------------------------------------------
+# Re-evaluate: Filtered Engine - Malicious Set (Recall / FNR)
+# ------------------------------------------------------------------
+print("\n[*] Evaluating FILTERED engine on malicious payload set...")
+
+tp_f = 0
+fn_f = 0
+missed_f = []
+
+for payload in filtered_signatures:
+    test_line = f"user_input: {payload}"
+    matches = filtered_engine.search(test_line)
+    if matches:
+        tp_f += 1
+    else:
+        fn_f += 1
+        missed_f.append(payload)
+
+total_malicious_f = len(filtered_signatures)
+recall_f = tp_f / total_malicious_f if total_malicious_f > 0 else 0
+fnr_f = fn_f / total_malicious_f if total_malicious_f > 0 else 0
+
+print(f"[+] Recall: {recall_f*100:.2f}%  |  FNR: {fnr_f*100:.2f}%")
+
+# -------------------------------------------------------------
+# Re-evaluate: Filtered Engine - Benign Set (Specificity / FPR)
+# -------------------------------------------------------------
+print("\n[*] Evaluating FILTERED engine on benign log set...")
+
+tn_f = 0
+fp_f = 0
+fp_lines_f = []
+
+for line in benign_logs:
+    matches = filtered_engine.search(line)
+    if matches:
+        fp_f += 1
+        fp_lines_f.append((line, matches))
+    else:
+        tn_f += 1
+
+total_benign_f = len(benign_logs)
+specificity_f = tn_f / total_benign_f if total_benign_f > 0 else 0
+fpr_f = fp_f / total_benign_f if total_benign_f > 0 else 0
+
+print(f"[+] Specificity: {specificity_f*100:.2f}%  |  FPR: {fpr_f*100:.2f}%")
+
+filtered_results = {
+    "condition": f"Filtered (min length={MIN_PATTERN_LENGTH})",
+    "total_signatures": total_malicious_f,
+    "recall": recall_f,
+    "false_negative_rate": fnr_f,
+    "specificity": specificity_f,
+    "false_positive_rate": fpr_f
+}
+
+
+
+# -----------------------------------
+# Before / After Comparison Table
+# -----------------------------------
+import pandas as pd
+
+comparison_df = pd.DataFrame([baseline_results, filtered_results])
+comparison_df["recall"] = (comparison_df["recall"] * 100).round(2)
+comparison_df["false_negative_rate"] = (comparison_df["false_negative_rate"] * 100).round(2)
+comparison_df["specificity"] = (comparison_df["specificity"] * 100).round(2)
+comparison_df["false_positive_rate"] = (comparison_df["false_positive_rate"] * 100).round(2)
+
+print("\n" + "="*60)
+print("BEFORE / AFTER COMPARISON: Signature Length Filtering")
+print("="*60)
+print(comparison_df.to_string(index=False))
+
+comparison_df.to_csv("fnr_fpr_comparison.csv", index=False)
+print("\n[SUCCESS] Comparison exported to 'fnr_fpr_comparison.csv'")
+
+# -------------------------------
+# Bar Chart: Before vs After
+# -------------------------------
+import matplotlib.pyplot as plt
+import numpy as np
+
+metrics = ["recall", "false_positive_rate"]
+labels = ["Recall (%)", "False Positive Rate (%)"]
+x = np.arange(len(labels))
+width = 0.35
+
+baseline_vals = [baseline_results["recall"]*100, baseline_results["false_positive_rate"]*100]
+filtered_vals = [filtered_results["recall"]*100, filtered_results["false_positive_rate"]*100]
+
+fig, ax = plt.subplots(figsize=(8,6))
+ax.bar(x - width/2, baseline_vals, width, label="Unfiltered (Baseline)")
+ax.bar(x + width/2, filtered_vals, width, label=f"Filtered (min length={MIN_PATTERN_LENGTH})")
+
+ax.set_ylabel("Percentage (%)")
+ax.set_title("Effect of Signature Length Filtering on Recall and False Positive Rate")
+ax.set_xticks(x)
+ax.set_xticklabels(labels)
+ax.legend()
+ax.grid(True, axis="y")
+
+plt.tight_layout()
+plt.savefig("fnr_fpr_comparison_chart.png", dpi=300, bbox_inches="tight")
+plt.show()
+
+print("[SUCCESS] Comparison chart exported as 'fnr_fpr_comparison_chart.png'")
+
+
+
