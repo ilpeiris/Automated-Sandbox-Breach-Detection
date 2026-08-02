@@ -752,3 +752,131 @@ print("[SUCCESS] Comparison chart exported as 'fnr_fpr_comparison_chart.png'")
 
 
 
+
+
+# ========================================================================
+# Phase 8: Space Complexity Analysis (Trie Node Count & Memory Footprint)
+# ========================================================================
+
+import sys
+
+print("\n" + "="*60)
+print("PHASE 8: Space Complexity Analysis")
+print("="*60)
+
+def analyze_trie_space(engine: AhoCorasick, label: str) -> dict:
+    """
+    Traverses the Trie via BFS to count nodes, edges, and estimate
+    memory footprint. This empirically validates the theoretical
+    space complexity of O(M), where M is the total length of all
+    inserted patterns.
+    """
+    visited = set()
+    queue = deque([engine.root])
+    node_count = 0
+    edge_count = 0
+    total_output_entries = 0
+    max_depth = 0
+
+    # BFS traversal to visit every node exactly once
+    depths = {id(engine.root): 0}
+
+    while queue:
+        current = queue.popleft()
+        if id(current) in visited:
+            continue
+        visited.add(id(current))
+        node_count += 1
+
+        current_depth = depths[id(current)]
+        max_depth = max(max_depth, current_depth)
+
+        total_output_entries += len(current.output_list)
+
+        for char, child in current.children.items():
+            edge_count += 1
+            if id(child) not in depths:
+                depths[id(child)] = current_depth + 1
+            queue.append(child)
+
+    # ------------------------------------------------------------
+    # Memory Estimation
+    # ------------------------------------------------------------
+    # sys.getsizeof only measures the shallow size of an object,
+    # so i approximate per-node cost by sampling a real node's
+    # base size plus its children dict and output list overhead.
+    sample_node = TrieNode()
+    base_node_size = sys.getsizeof(sample_node)
+    dict_overhead = sys.getsizeof({})
+    list_overhead = sys.getsizeof([])
+
+    estimated_bytes = node_count * (base_node_size + dict_overhead + list_overhead)
+    estimated_kb = estimated_bytes / 1024
+
+    results = {
+        "condition": label,
+        "node_count": node_count,
+        "edge_count": edge_count,
+        "max_trie_depth": max_depth,
+        "total_output_entries": total_output_entries,
+        "estimated_memory_bytes": estimated_bytes,
+        "estimated_memory_kb": round(estimated_kb, 2)
+    }
+
+    print(f"\n--- {label} ---")
+    print(f"[+] Total Trie Nodes:        {node_count}")
+    print(f"[+] Total Edges (transitions): {edge_count}")
+    print(f"[+] Maximum Trie Depth:      {max_depth}")
+    print(f"[+] Total Output Entries:    {total_output_entries} "
+          f"(includes inherited outputs from failure links)")
+    print(f"[+] Estimated Memory Usage:  {estimated_bytes:,} bytes (~{estimated_kb:.2f} KB)")
+
+    return results
+
+# ------------------------------------------------------------
+# Run analysis on BOTH engines for a before/after comparison
+# ------------------------------------------------------------
+space_unfiltered = analyze_trie_space(waf_engine, "Unfiltered Engine")
+space_filtered = analyze_trie_space(filtered_engine, f"Filtered Engine (min length={MIN_PATTERN_LENGTH})")
+
+# ----------------------------
+# Comparison Table
+# --------------------------
+space_comparison_df = pd.DataFrame([space_unfiltered, space_filtered])
+
+print("\n" + "="*60)
+print("SPACE COMPLEXITY COMPARISON")
+print("="*60)
+print(space_comparison_df.to_string(index=False))
+
+space_comparison_df.to_csv("space_complexity_comparison.csv", index=False)
+print("\n[SUCCESS] Space complexity results exported to 'space_complexity_comparison.csv'")
+
+# ------------------------------------------------------------------
+# Empirical Validation: Node Count vs. Total Pattern Length (M)
+# ------------------------------------------------------------------
+# This directly tests the theoretical claim that space is O(M),
+# by comparing node_count against the sum of all pattern lengths.
+
+total_pattern_length_unfiltered = sum(len(s) for s in cmdi_signatures)
+total_pattern_length_filtered = sum(len(s) for s in filtered_signatures)
+
+print("\n" + "="*60)
+print("EMPIRICAL VALIDATION: Node Count vs Total Pattern Length (M)")
+print("="*60)
+print(f"{'Condition':<35}{'Total Chars (M)':<18}{'Trie Nodes':<15}{'Nodes/M Ratio':<15}")
+print("-"*83)
+print(f"{'Unfiltered':<35}{total_pattern_length_unfiltered:<18}"
+      f"{space_unfiltered['node_count']:<15}"
+      f"{space_unfiltered['node_count']/total_pattern_length_unfiltered:<15.4f}")
+print(f"{'Filtered':<35}{total_pattern_length_filtered:<18}"
+      f"{space_filtered['node_count']:<15}"
+      f"{space_filtered['node_count']/total_pattern_length_filtered:<15.4f}")
+print("\n[NOTE] A Nodes/M ratio below 1.0 confirms sub-linear growth due to shared")
+print("       prefixes in the Trie (e.g. overlapping command patterns), which is")
+print("       expected behaviour and demonstrates the space efficiency of the")
+print("       Trie structure relative to storing patterns as separate strings.")
+
+
+
+
