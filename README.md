@@ -189,7 +189,7 @@ Measures:
 - estimated memory usage,
 - nodes-per-character ratio.
 
-### Final Step — Unit Tests
+### Final Step - Unit Tests
 
 Runs assertion-based tests for:
 
