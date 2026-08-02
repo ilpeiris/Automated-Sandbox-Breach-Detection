@@ -177,4 +177,48 @@ print("="*50)
 
 
 
+# ==========================================================================
+# Phase 3: Aho-Corasick Benchmark (O(N + M + Z))
+# ==========================================================================
+
+
+print("\n" + "="*50)
+print("PHASE 3: Aho-Corasick Engine Benchmark")
+print("="*50)
+
+# Initialize the Engine
+print("[*] Initializing Aho-Corasick Engine...")
+waf_engine = AhoCorasick()
+
+# Build the Automaton (Trie + Failure Links)
+start_build = time.perf_counter()
+
+for signature in cmdi_signatures:
+    waf_engine.add_pattern(str(signature))
+
+waf_engine.build_failure_links()  # Must be called after all patterns are inserted, before any search
+
+end_build = time.perf_counter()
+build_time = end_build - start_build
+
+print(f"[+] Trie & Failure Links built in {build_time:.6f} seconds across {len(cmdi_signatures)} signatures.")
+
+# Prepare a Complex Polyglot Payload (Simulating a Sandbox Escape Attempt)
+simulated_prompt = 'Summarize this file: /*$(sleep 5)`sleep 5``*/-sleep(5)-"||sleep(5)||"/etc/passwd'
+print(f"\n[*] Scanning incoming prompt ({len(simulated_prompt)} characters)...")
+
+# Scan the Text using Aho-Corasick
+start_scan = time.perf_counter()
+threats_detected = waf_engine.search(simulated_prompt)  # Single-pass scan; O(N+Z) per call
+end_scan = time.perf_counter()
+
+scan_time = end_scan - start_scan
+
+print(f"[+] Aho-Corasick scan completed in {scan_time:.6f} seconds.")
+print(f"[!] Threats Detected: {len(threats_detected)}")
+if threats_detected:
+    print(f"    Sample match: {threats_detected[0]}")
+
+
+
 
