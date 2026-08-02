@@ -6,6 +6,13 @@
 ![Jupyter](https://img.shields.io/badge/Jupyter-Notebook-orange)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
+<p align="center">
+  <img
+    src="https://orca.security/wp-content/uploads/2026/07/blog-rapid-response-openai-agents-escape-sandbox-breach-huggingface-1.png?w=1044"
+    alt="OpenAI Agents Sandbox Escape"
+    width="800">
+</p>
+
 This repository contains a reference implementation and empirical evaluation notebook for a deterministic multi-pattern matching engine built on the **Aho-Corasick** algorithm.
 
 The engine scans log text once and detects known malicious command-injection signatures in linear time. It is designed to act as a lightweight **gatekeeper** before more expensive analysis stages such as LLM inference, SIEM enrichment, anomaly detection, or human review.
