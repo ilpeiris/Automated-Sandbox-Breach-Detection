@@ -222,3 +222,37 @@ if threats_detected:
 
 
 
+
+#===========================================================================
+# Phase 4: Reference Baseline (Python Native 'in' Operator)
+# ==========================================================================
+
+print("\n" + "="*50)
+print("PHASE 4: Reference Baseline Benchmark (Python Native 'in')")
+print("="*50)
+
+# Run the native approach to compare against the Aho-Corasick speed
+print("[*] Running Native Baseline (checking each pattern individually)...")
+start_naive = time.perf_counter()
+
+# For every pattern check if it exists using CPythons highly optimized Two-Way search
+for pattern in cmdi_signatures:
+    if pattern in simulated_prompt:
+        pass  
+
+end_naive = time.perf_counter()
+naive_time = end_naive - start_naive
+
+# Calculate the speedup factor
+speedup = naive_time / scan_time if scan_time > 0 else float('inf')
+
+print(f"[Native 'in'] Scan completed in {naive_time:.6f} seconds.")
+print(f"[Aho-Corasick] Scan completed in {scan_time:.6f} seconds.")
+print(f"[+] SPEEDUP: The Aho-Corasick engine is {speedup:.2f}x faster than Python's native C-optimized search!")
+
+print("\n" + "="*50)
+print("[NOTE] True O(N x M) complexity is demonstrated in the scaled Phase 5 benchmark.")
+print("="*50)
+
+
+
