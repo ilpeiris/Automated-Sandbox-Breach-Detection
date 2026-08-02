@@ -3,6 +3,7 @@
 # Automated Sandbox Breach Detection - Aho-Corasick Pre-Filtering Engine
 # ===========================================================================
 
+
 # ===========================================================================
 # Phase 1: Aho-Corasick Engine Build (Custom Trie with Failure Links)
 # ===========================================================================
@@ -126,8 +127,6 @@ class AhoCorasick:
         return results
 
 
-
-
 # =============================================================================
 # Phase 2: Data Ingestion (Local Priority with GitHub Fallback)
 # ===========================================================================
@@ -175,8 +174,6 @@ print(f"[SUCCESS] Total unique malicious signatures compiled: {len(cmdi_signatur
 print("="*50)
 
 
-
-
 # ==========================================================================
 # Phase 3: Aho-Corasick Benchmark (O(N + M + Z))
 # ==========================================================================
@@ -222,7 +219,6 @@ if threats_detected:
 
 
 
-
 #===========================================================================
 # Phase 4: Reference Baseline (Python Native 'in' Operator)
 # ==========================================================================
@@ -254,201 +250,111 @@ print("\n" + "="*50)
 print("[NOTE] True O(N x M) complexity is demonstrated in the scaled Phase 5 benchmark.")
 print("="*50)
 
-
-
-
-
 # ========================================================================
-# Phase 5: Scaled Benchmark & Visualization
+# Phase 5: Scaled Benchmark & Visualization (Upgraded for Rigor)
 # ========================================================================
-
 import time
+import statistics
 import matplotlib.pyplot as plt
+import pandas as pd
 
 print("\n" + "=" * 60)
 print("PHASE 5: Scaled Benchmark & Visualization")
 print("=" * 60)
 
-# -----------------
-# Configuration
-# -----------------
-
-base_prompt = (
-    'Summarize this file: '
-    '/*$(sleep 5)`sleep 5``*/-sleep(5)-"||sleep(5)||"/etc/passwd'
-)
-
-# Different input sizes
+base_prompt = 'Summarize this file: /*$(sleep 5)`sleep 5``*/-sleep(5)-"||sleep(5)||"/etc/passwd'
 multipliers = [1, 5, 10, 25, 50, 100, 250, 500]
 
-# Number of benchmark repetitions
-RUNS = 5
+# INCREASED RUNS FOR STATISTICAL RELIABILITY
+RUNS = 20 
 
-text_lengths = []
-aho_times = []
-naive_times = []
+text_lengths, aho_medians, aho_stdevs = [], [], []
+native_in_medians, native_in_stdevs = [], []
+pure_naive_medians = [] # Tracking this to show worst-case O(N*M)
 
-print("[*] Running scaled benchmark...")
-
-# ----------------
-# Benchmark Loop
-# ----------------
+print(f"[*] Running scaled benchmark with {RUNS} runs per size...")
 
 for mult in multipliers:
-
     test_text = base_prompt * mult
-
     text_lengths.append(len(test_text))
-
-    # ======================
-    # Aho-Corasick Benchmark
-    # ======================
-
-    aho_total = 0.0
-
+    
+    aho_times, native_times, pure_naive_times = [], [], []
+    
     for _ in range(RUNS):
-
+        # 1. Aho-Corasick
         start = time.perf_counter()
-
         waf_engine.search(test_text)
-
-        end = time.perf_counter()
-
-        aho_total += (end - start)
-
-    aho_average = aho_total / RUNS
-
-    aho_times.append(aho_average)
-
-    # =====================================
-    # TRUE Naive String Matching Benchmark
-    # =====================================
-
-    naive_total = 0.0
-
-    for _ in range(RUNS):
-
+        aho_times.append(time.perf_counter() - start)
+        
+        # 2. Python Native 'in' Baseline
         start = time.perf_counter()
-
         for pattern in cmdi_signatures:
-
-            pattern_length = len(pattern)
-            text_length = len(test_text)
-
-            if pattern_length == 0:
-                continue
-
-            # Slide pattern across text
-            for i in range(text_length - pattern_length + 1):
-
+            if pattern in test_text:
+                pass
+        native_times.append(time.perf_counter() - start)
+        
+        # 3. Pure Naive Character-by-Character (Worst-case O(N*M) proof)
+        start = time.perf_counter()
+        for pattern in cmdi_signatures:
+            p_len = len(pattern)
+            t_len = len(test_text)
+            if p_len == 0: continue
+            for i in range(t_len - p_len + 1):
                 matched = True
-
-                # Compare character-by-character
-                for j in range(pattern_length):
-
+                for j in range(p_len):
                     if test_text[i + j] != pattern[j]:
                         matched = False
                         break
+                if matched: pass
+        pure_naive_times.append(time.perf_counter() - start)
 
-                if matched:
-                    pass
-
-        end = time.perf_counter()
-
-        naive_total += (end - start)
-
-    naive_average = naive_total / RUNS
-
-    naive_times.append(naive_average)
+    # Calculate Medians and StDevs
+    aho_medians.append(statistics.median(aho_times))
+    aho_stdevs.append(statistics.stdev(aho_times))
+    native_in_medians.append(statistics.median(native_times))
+    native_in_stdevs.append(statistics.stdev(native_times))
+    pure_naive_medians.append(statistics.median(pure_naive_times))
 
 # ---------------
 # Print Results
 # ---------------
+print("\nBenchmark Results (Medians)")
+print("-" * 105)
+print(f"{'Input Size':<15}{'Pure Naive (s)':<18}{'Native In (s)':<18}{'Aho (s)':<18}{'Speedup (vs Native)':<15}")
+print("-" * 105)
 
-print("\nBenchmark Results")
-print("-" * 85)
-
-print(
-    f"{'Input Size':<15}"
-    f"{'Naive (s)':<18}"
-    f"{'Aho (s)':<18}"
-    f"{'Speedup':<15}"
-)
-
-print("-" * 85)
-
-for length, naive, aho in zip(text_lengths, naive_times, aho_times):
-
-    speedup = naive / aho if aho > 0 else float("inf")
-
-    print(
-        f"{length:<15}"
-        f"{naive:<18.6f}"
-        f"{aho:<18.6f}"
-        f"{speedup:<15.2f}x"
-    )
-
-
-
+for length, pure, native, aho in zip(text_lengths, pure_naive_medians, native_in_medians, aho_medians):
+    speedup = native / aho if aho > 0 else float("inf")
+    print(f"{length:<15}{pure:<18.6f}{native:<18.6f}{aho:<18.6f}{speedup:<15.2f}x")
 
 # ---------------------------------
 # Export Benchmark Results to CSV
 # ---------------------------------
 benchmark_results_df = pd.DataFrame({
     "input_size_chars": text_lengths,
-    "naive_time_seconds": naive_times,
-    "aho_corasick_time_seconds": aho_times,
-    "speedup_factor": [n/a if a > 0 else float("inf") for n, a in zip(naive_times, aho_times)]
+    "pure_naive_median_s": pure_naive_medians,
+    "native_in_median_s": native_in_medians,
+    "aho_corasick_median_s": aho_medians,
+    "speedup_vs_native": [n/a if a > 0 else float("inf") for n, a in zip(native_in_medians, aho_medians)]
 })
-
 benchmark_results_df.to_csv("throughput_benchmark_results.csv", index=False)
 print(f"\n[SUCCESS] Benchmark results exported to 'throughput_benchmark_results.csv'")
-print(benchmark_results_df.to_string(index=False))
 
 # ------------------
 # Plot Graph
 # ------------------
-
 plt.figure(figsize=(10,6))
-
-plt.plot(
-    text_lengths,
-    naive_times,
-    marker="o",
-    linestyle="--",
-    linewidth=2,
-    label="Naive String Matching (O(N × M))"
-)
-
-plt.plot(
-    text_lengths,
-    aho_times,
-    marker="s",
-    linewidth=2,
-    label="Aho-Corasick (O(N + M + Z))"
-)
-
-plt.title("Performance Comparison: Aho-Corasick vs Naive String Matching")
-
+plt.plot(text_lengths, native_in_medians, marker="o", linestyle="--", linewidth=2, label="Python 'in' Operator (Optimized Baseline)")
+plt.plot(text_lengths, aho_medians, marker="s", linewidth=2, label="Aho-Corasick (O(N + M + Z))")
+plt.title("Performance Comparison: Aho-Corasick vs Native Python Baseline")
 plt.xlabel("Input Text Length (Characters)")
-
-plt.ylabel("Average Execution Time (Seconds)")
-
+plt.ylabel("Median Execution Time (Seconds)")
 plt.grid(True)
-
 plt.legend()
-
 plt.tight_layout()
-
 plt.savefig("benchmark_results.png", dpi=300, bbox_inches="tight")
-
 plt.show()
-
 print("\n[SUCCESS] Benchmark graph exported as 'benchmark_results.png'")
-
-
-
-
 
 
 # ===========================================================================
@@ -585,6 +491,8 @@ if false_positive_lines:
 
 
 
+
+
 # ======================================================================
 # Phase 7: Signature Refinement Experiment (Before/After Comparison)
 # ======================================================================
@@ -641,17 +549,18 @@ print(f"[+] Filtered engine rebuilt with {filtered_count} signatures.")
 
 
 
-
 # ------------------------------------------------------------------
-# Re-evaluate: Filtered Engine - Malicious Set (Recall / FNR)
+# Re-evaluate: Filtered Engine - Malicious Set (TRUE RECALL / FNR)
 # ------------------------------------------------------------------
-print("\n[*] Evaluating FILTERED engine on malicious payload set...")
+print("\n[*] Evaluating FILTERED engine on ORIGINAL malicious payload set...")
 
 tp_f = 0
 fn_f = 0
 missed_f = []
 
-for payload in filtered_signatures:
+# CRITICAL FIX: We test against cmdi_signatures (the original full list) 
+# to honestly see what we miss by filtering out the short patterns.
+for payload in cmdi_signatures:
     test_line = f"user_input: {payload}"
     matches = filtered_engine.search(test_line)
     if matches:
@@ -660,11 +569,11 @@ for payload in filtered_signatures:
         fn_f += 1
         missed_f.append(payload)
 
-total_malicious_f = len(filtered_signatures)
-recall_f = tp_f / total_malicious_f if total_malicious_f > 0 else 0
-fnr_f = fn_f / total_malicious_f if total_malicious_f > 0 else 0
+total_malicious_original = len(cmdi_signatures)
+recall_f = tp_f / total_malicious_original if total_malicious_original > 0 else 0
+fnr_f = fn_f / total_malicious_original if total_malicious_original > 0 else 0
 
-print(f"[+] Recall: {recall_f*100:.2f}%  |  FNR: {fnr_f*100:.2f}%")
+print(f"[+] Recall against original set: {recall_f*100:.2f}%  |  FNR: {fnr_f*100:.2f}%")
 
 # -------------------------------------------------------------
 # Re-evaluate: Filtered Engine - Benign Set (Specificity / FPR)
@@ -689,13 +598,28 @@ fpr_f = fp_f / total_benign_f if total_benign_f > 0 else 0
 
 print(f"[+] Specificity: {specificity_f*100:.2f}%  |  FPR: {fpr_f*100:.2f}%")
 
+# -------------------------------------------------------------
+# Calculate Gatekeeper Metrics (Precision & F1)
+# -------------------------------------------------------------
+precision_baseline = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0
+f1_baseline = 2 * (precision_baseline * recall) / (precision_baseline + recall) if (precision_baseline + recall) > 0 else 0
+
+precision_f = tp_f / (tp_f + fp_f) if (tp_f + fp_f) > 0 else 0
+f1_f = 2 * (precision_f * recall_f) / (precision_f + recall_f) if (precision_f + recall_f) > 0 else 0
+
+# Update baseline_results dictionary with precision and F1
+baseline_results["precision"] = precision_baseline
+baseline_results["f1_score"] = f1_baseline
+
 filtered_results = {
     "condition": f"Filtered (min length={MIN_PATTERN_LENGTH})",
-    "total_signatures": total_malicious_f,
+    "total_signatures": total_malicious_original,
     "recall": recall_f,
     "false_negative_rate": fnr_f,
     "specificity": specificity_f,
-    "false_positive_rate": fpr_f
+    "false_positive_rate": fpr_f,
+    "precision": precision_f,
+    "f1_score": f1_f
 }
 
 
@@ -749,6 +673,9 @@ plt.savefig("fnr_fpr_comparison_chart.png", dpi=300, bbox_inches="tight")
 plt.show()
 
 print("[SUCCESS] Comparison chart exported as 'fnr_fpr_comparison_chart.png'")
+
+
+
 
 
 
@@ -882,26 +809,42 @@ print("       Trie structure relative to storing patterns as separate strings.")
 
 
 
+
+
 # =============================================================================
-# Unit Testing & Validation
+# Unit Testing & Validation (Expanded Edge Cases)
 # =============================================================================
-print("[*] Running Unit Tests...")
+import sys
+print(f"\n[*] Running Expanded Unit Tests (Python {sys.version.split()[0]})...")
 
 test_engine = AhoCorasick()
 test_engine.add_pattern("cat /etc/passwd")
-test_engine.add_pattern("rm -rf")
+test_engine.add_pattern("he")
+test_engine.add_pattern("she")
+test_engine.add_pattern("his")
+test_engine.add_pattern("hers")
+test_engine.add_pattern("") # Should handle empty gracefully
 test_engine.build_failure_links()
 
-test_string_1 = "User input: cat /etc/passwd && echo done"
-test_string_2 = "Safe string with no threats"
-
-# Test 1: Expected match
-results_1 = test_engine.search(test_string_1)
+# Test 1: Expected basic match
+results_1 = test_engine.search("User input: cat /etc/passwd && echo done")
 assert len(results_1) == 1, "Test 1 Failed"
 assert results_1[0][1] == "cat /etc/passwd", "Test 1 Match Failed"
 
-# Test 2: No match
-results_2 = test_engine.search(test_string_2)
-assert len(results_2) == 0, "Test 2 Failed"
+# Test 2: Overlapping and Suffix matches (Crucial Aho-Corasick test)
+res_overlap = test_engine.search("ushers")
+# "ushers" contains "she", "he", "hers"
+matched_patterns = [match[1] for match in res_overlap]
+assert "she" in matched_patterns, "Failed to match 'she'"
+assert "he" in matched_patterns, "Failed to match overlapping 'he'"
+assert "hers" in matched_patterns, "Failed to match suffix 'hers'"
 
-print("[SUCCESS] All unit tests passed. Engine accurately identifies payloads without false positives.")
+# Test 3: No match
+res_safe = test_engine.search("Safe string with no threats")
+assert len(res_safe) == 0, "Test 3 Failed: False positive detected"
+
+# Test 4: Multiple exact matches in a row
+res_multi = test_engine.search("he he he")
+assert len(res_multi) == 3, "Test 4 Failed: Did not find all occurrences"
+
+print("[SUCCESS] All advanced unit tests passed. Overlaps, suffixes, and empty strings handled correctly.")
