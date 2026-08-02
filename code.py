@@ -446,3 +446,141 @@ plt.show()
 
 print("\n[SUCCESS] Benchmark graph exported as 'benchmark_results.png'")
 
+
+
+
+
+
+# ===========================================================================
+# Phase 6: Security Evaluation (False Negative Rate / False Positive Rate)
+# ============================================================================
+
+print("\n" + "="*60)
+print("PHASE 6: Security Evaluation - FNR / FPR Analysis")
+print("="*60)
+
+# ------------------------------------------------------------------
+# Load a Benign Log Corpus (Local Priority with Fallback)
+# ------------------------------------------------------------------
+# need a set of KNOWN-SAFE log lines to test for false positives.
+# I found Loghub's OpenSSH dataset is a standard, citable benchmark of benign
+# system logs, widely used in log-analysis research.
+
+benign_logs = []
+
+try:
+    # 1st Priority: Local file if already downloaded
+    with open("openssh_benign_logs.txt", "r", encoding="utf-8") as f:
+        benign_logs = [line.strip() for line in f.readlines() if line.strip()]
+    print(f"[+] Loaded {len(benign_logs)} benign log lines from local file.")
+
+except FileNotFoundError:
+    # 2nd Priority: Fallback to Loghub's raw GitHub sample
+    loghub_url = "https://raw.githubusercontent.com/logpai/loghub/master/OpenSSH/OpenSSH_2k.log"
+    try:
+        print("[*] Local benign log file not found. Fetching from Loghub (GitHub)...")
+        response = urllib.request.urlopen(loghub_url)
+        raw_text = response.read().decode('utf-8', errors='ignore')
+        benign_logs = [line.strip() for line in raw_text.split('\n') if line.strip()]
+        print(f"[+] Loaded {len(benign_logs)} benign log lines from Loghub GitHub.")
+    except urllib.error.URLError as e:
+        print(f"[-] Could not reach Loghub ({e.reason}). Using a small fallback benign sample.")
+        # 3rd Priority: Minimal built-in fallback so the script never crashes
+        benign_logs = [
+            "Accepted password for user1 from 192.168.1.5 port 22 ssh2",
+            "Connection closed by 192.168.1.10 port 51422",
+            "session opened for user admin by (uid=0)",
+            "Failed password for invalid user test from 10.0.0.5 port 44212 ssh2",
+            "Received disconnect from 192.168.1.20: 11: disconnected by user",
+        ]
+
+print(f"[SUCCESS] Benign log corpus ready: {len(benign_logs)} lines.")
+
+
+# ------------------------------------------------------------------
+# Run Aho-Corasick Against the MALICIOUS Set (Recall / FNR)
+# ------------------------------------------------------------------
+# For every known-malicious payload, check whether the engine detects it
+# when embedded in a realistic log-style sentence.
+
+print("\n[*] Evaluating detection rate on malicious payload set...")
+
+true_positives = 0
+false_negatives = 0
+missed_payloads = []
+
+for payload in cmdi_signatures:
+    # Wrap the payload in a small log-like context, similar to real usage
+    test_line = f"user_input: {payload}"
+    matches = waf_engine.search(test_line)
+
+    if matches:
+        true_positives += 1
+    else:
+        false_negatives += 1
+        missed_payloads.append(payload)
+
+total_malicious = len(cmdi_signatures)
+recall = true_positives / total_malicious if total_malicious > 0 else 0
+false_negative_rate = false_negatives / total_malicious if total_malicious > 0 else 0
+
+print(f"[+] Total malicious payloads tested: {total_malicious}")
+print(f"[+] True Positives (correctly flagged): {true_positives}")
+print(f"[+] False Negatives (missed): {false_negatives}")
+print(f"[+] Recall (Detection Rate): {recall:.4f} ({recall*100:.2f}%)")
+print(f"[+] False Negative Rate: {false_negative_rate:.4f} ({false_negative_rate*100:.2f}%)")
+
+# ------------------------------------------------------------------
+#Run Aho-Corasick Against the BENIGN Set (Specificity / FPR)
+# ------------------------------------------------------------------
+# For every known-safe log line, check whether the engine incorrectly
+# flags it as malicious.
+
+print("\n[*] Evaluating false positive rate on benign log set...")
+
+true_negatives = 0
+false_positives = 0
+false_positive_lines = []
+
+for line in benign_logs:
+    matches = waf_engine.search(line)
+
+    if matches:
+        false_positives += 1
+        false_positive_lines.append((line, matches))
+    else:
+        true_negatives += 1
+
+total_benign = len(benign_logs)
+specificity = true_negatives / total_benign if total_benign > 0 else 0
+false_positive_rate = false_positives / total_benign if total_benign > 0 else 0
+
+print(f"[+] Total benign log lines tested: {total_benign}")
+print(f"[+] True Negatives (correctly passed): {true_negatives}")
+print(f"[+] False Positives (incorrectly flagged): {false_positives}")
+print(f"[+] Specificity: {specificity:.4f} ({specificity*100:.2f}%)")
+print(f"[+] False Positive Rate: {false_positive_rate:.4f} ({false_positive_rate*100:.2f}%)")
+
+# -----------------------------
+# Summary Table
+# ----------------------------
+
+print("\n" + "="*60)
+print("SECURITY EVALUATION SUMMARY")
+print("="*60)
+print(f"{'Metric':<30}{'Value':<15}")
+print("-"*45)
+print(f"{'Recall (Detection Rate)':<30}{recall*100:.2f}%")
+print(f"{'False Negative Rate':<30}{false_negative_rate*100:.2f}%")
+print(f"{'Specificity':<30}{specificity*100:.2f}%")
+print(f"{'False Positive Rate':<30}{false_positive_rate*100:.2f}%")
+print("="*60)
+
+if missed_payloads:
+    print(f"\n[NOTE] Sample of missed payloads (first 3): {missed_payloads[:3]}")
+if false_positive_lines:
+    print(f"[NOTE] Sample false positive (first 1): {false_positive_lines[:1]}")
+
+
+
+
