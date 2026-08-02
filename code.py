@@ -880,3 +880,28 @@ print("       Trie structure relative to storing patterns as separate strings.")
 
 
 
+
+
+# =============================================================================
+# Unit Testing & Validation
+# =============================================================================
+print("[*] Running Unit Tests...")
+
+test_engine = AhoCorasick()
+test_engine.add_pattern("cat /etc/passwd")
+test_engine.add_pattern("rm -rf")
+test_engine.build_failure_links()
+
+test_string_1 = "User input: cat /etc/passwd && echo done"
+test_string_2 = "Safe string with no threats"
+
+# Test 1: Expected match
+results_1 = test_engine.search(test_string_1)
+assert len(results_1) == 1, "Test 1 Failed"
+assert results_1[0][1] == "cat /etc/passwd", "Test 1 Match Failed"
+
+# Test 2: No match
+results_2 = test_engine.search(test_string_2)
+assert len(results_2) == 0, "Test 2 Failed"
+
+print("[SUCCESS] All unit tests passed. Engine accurately identifies payloads without false positives.")
