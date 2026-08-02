@@ -1,0 +1,126 @@
+# =========================================================================
+# Author: M.D. Isuru Lakmal Peiris
+# Automated Sandbox Breach Detection - Aho-Corasick Pre-Filtering Engine
+# ===========================================================================
+
+# ===========================================================================
+# Phase 1: Aho-Corasick Engine Build (Custom Trie with Failure Links)
+# ===========================================================================
+
+from collections import deque
+from typing import List, Dict, Optional, Tuple
+import time
+import pandas as pd
+
+class TrieNode:
+    """
+    Represents a single character node within the Aho-Corasick automaton.
+    """
+    def __init__(self):
+        # Dictionary mapping a character to its child TrieNode
+        self.children: Dict[str, 'TrieNode'] = {}
+        # Pointer to the next best fallback node if a mismatch occurs
+        self.failure_link: Optional['TrieNode'] = None
+        # List of malicious payloads that end at this specific node
+        self.output_list: List[str] = []
+
+class AhoCorasick:
+    """
+    Deterministic finite Automaton for high-speed multi-pattern matching.
+    Time Complexity: O(N + M + Z) where N=text length, M=total pattern length, Z=matches.
+    """
+    def __init__(self):
+        self.root = TrieNode()
+
+    def add_pattern(self, pattern: str) -> None:
+        """
+        Inserts a malicious payload into the Trie structure.
+        Time Complexity: O(L) where L is the length of the pattern.
+        """
+        if not pattern:
+            return
+        
+        node = self.root
+        for char in pattern:
+            # If the path dosnt exist, create a new TrieNode
+            if char not in node.children:
+                node.children[char] = TrieNode()
+            # Move to the child node
+            node = node.children[char]
+        # Mark the end of this malicious pattern
+        node.output_list.append(pattern)
+
+    def build_failure_links(self) -> None:
+        """
+        Constructs failure links using Breadth-First Search
+        allows O(N) scanning by preventing backtracking.
+        """
+        queue = deque()
+        
+        # Initialize the first depth level (children of the root) 
+        # The failure link of roots children always points back to root
+        for char, child in self.root.children.items():
+            child.failure_link = self.root
+            queue.append(child)
+
+        #  BFS Traversal through the rest of the Trie 
+        while queue:
+            current_node = queue.popleft()
+            
+            # Iterate through all children of the current node
+            for char, child in current_node.children.items():
+                queue.append(child)
+                fallback = current_node.failure_link
+                
+                # Find the longest proper suffix 
+                # Trace back through failure links until we find a node that has
+                # a child matching 'char', we hit the root
+                while fallback and char not in fallback.children:
+                    fallback = fallback.failure_link
+                
+                # Assign the failure link 
+                if fallback:
+                    child.failure_link = fallback.children[char]
+                else:
+                    child.failure_link = self.root
+                
+                # Inherit outputs for overlapping patterns 
+                # If the failure link points to a node that marks the end of a pattern,
+                # propagate that pattern to the current child to catch overlaps
+                if child.failure_link:
+                    child.output_list.extend(child.failure_link.output_list)
+
+    def search(self, text: str) -> List[Tuple[int, str]]:
+        """
+        Scans continuous text in O(N + Z) time complexity.
+        N = length of text, Z = number of matches found.
+        """
+        node = self.root
+        results = []
+        
+        # Iterate through the text character by character
+        for i, char in enumerate(text):
+            # Handle mismatch by following failure links
+            # While having a node and the current character doest match a child,
+            # follow the failure link to find a fallback state.
+            while node and char not in node.children:
+                node = node.failure_link
+            
+            # Reset to root if no match found
+            # If node is None, it means we fell back to nothing, so restart at root
+            if not node:
+                node = self.root
+                continue
+            
+            #Transition to the matching child node
+            node = node.children[char]
+            
+            # Record any malicious patterns ending at this position
+            # If the current node has output patterns, calculate their start index
+            # and append them to our results list
+            if node.output_list:
+                for pattern in node.output_list:
+                    start_index = i - len(pattern) + 1
+                    results.append((start_index, pattern))
+                    
+        return results
