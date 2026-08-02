@@ -1,0 +1,3 @@
+condition,node_count,edge_count,max_trie_depth,total_output_entries,estimated_memory_bytes,estimated_memory_kb
+Unfiltered Engine,14889,14888,1524,1204,2501352,2442.73
+Filtered Engine (min length=4),14883,14882,1524,839,2500344,2441.74
